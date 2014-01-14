@@ -1,8 +1,8 @@
-public class Test {
+public class Test1 {
 
 // zzzzz
 
-    public Test() {
+    public Test1() {
         // TODO Auto-generated constructor stub
     }
 
