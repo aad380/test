@@ -1,0 +1,741 @@
+<?xml version="1.0" encoding="UTF-8" ?>
+
+<project name="xmlolap" default="jar" basedir=".">
+
+	<property name="commonproperties" value="common.properties"/>
+	<property file="commonbuild.properties"/>
+	<property file="${commonproperties}"/>
+	<property name="deployRoot" value="${DEPLOYED_RESIN_WEBAPPS}/../.."/>
+	<property name="data" value="${deployRoot}/data"/>
+	<property name="bin" value="${deployRoot}/bin"/>
+	<property name="config" value="${deployRoot}/config"/>
+	<property name="deployResources" value="${deployRoot}/resources"/>
+	<property name="lib.dir" value="lib"/>
+	<property name="webapps" value="${DEPLOYED_RESIN_WEBAPPS}/.."/>
+	<property name="deployed.webapps.dir" location="${DEPLOYED_RESIN_WEBAPPS}"/>
+	<property environment="env"/>
+
+	<property name="client.class.dir" value="clientclasses"/>
+	<property name="server.class.dir" value="classes"/>
+	<property name="resources" value="resources"/>
+	<property name="replacement.properties" value="/tmp/xmlolapreplacement.properties"/>
+
+	<!-- client targets -->
+	<path id="client-lib-jars">
+		<fileset dir="lib">
+			<include name="commons-logging-api*.jar"/>
+			<include name="commons-lang*.jar"/>
+			<include name="log4j*.jar"/>
+			<include name="jmxtools*.jar"/>
+		</fileset>
+	</path>
+
+	<target name="init-client">
+		<echo message="##### running init-client #####"/>
+		<mkdir dir="${client.class.dir}"/>
+	</target>
+
+	<target name="clean-client" depends="init-client">
+		<echo message="##### running clean #####"/>
+		<delete dir="${client.class.dir}"/>
+	</target>
+
+	<target name="client-compile" depends="init-client">
+		<javac srcdir="client/jsrc" destdir="${client.class.dir}" source="1.5" debug="on">
+			<classpath refid="client-lib-jars"/>
+		</javac>
+	</target>
+
+
+	<target name="client-jar" depends="client-compile">
+		<loadproperties srcfile="client.package.properties"></loadproperties>
+		<echo message="##### running jar #####"/>
+		<mkdir dir="clienttempjar"/>
+		<mkdir dir="${deployDir}"/>
+		<copy todir="clienttempjar">
+			<fileset dir="${client.class.dir}"/>
+		</copy>
+		<echo message="##### Preparing ${packageName} jar file #####"/>
+		<jar basedir="clienttempjar" destfile="${deployDir}/tf-${packageName}-client.jar"/>
+		<delete dir="clienttempjar"/>
+	</target>
+
+	<target name="get-client-package-distribution-path" depends="init" unless="clientdistpath">
+		<loadproperties srcfile="client.package.properties"></loadproperties>
+		<property name="clientdistpath" value="client/${major.version}.${minor.version}/${major.version}.${minor.version}.${build.number}"/>
+		<echo message="##### Jar Path: = ${clientdistpath} #####"/>
+	</target>
+
+	<target name="get-client-package-jar-name" depends="init-client" unless="clienjarname">
+		<loadproperties srcfile="client.package.properties"></loadproperties>
+		<property name="clienjarname" value="tf-${packageName}-client-${major.version}.${minor.version}.${build.number}.jar"/>
+		<echo message="##### Jar Path: = ${clienjarname} #####"/>
+	</target>
+
+	<target name="client-version-jar" depends="client-jar,get-client-package-distribution-path,get-client-package-jar-name">
+		<buildnumber file="client.package.properties"/>
+		<echo message="##### Preparing ${packageName} ${major.version}.${minor.version}.${build.number} jar file #####"/>
+		<copy file="${deployDir}/tf-${packageName}-client.jar" tofile="${distDir}/${clientdistpath}/${clienjarname}"/>
+		<propertyfile file="client.version.properties">
+			<entry key="client.vpackageName" value="${packageName}"/>
+			<entry key="client.vbuild.number" type="int" value="${build.number}"/>
+			<entry key="client.vdistDir" value="${distDir}"/>
+			<entry key="client.vmajor.version" type="int" value="${major.version}"/>
+			<entry key="client.vminor.version" type="int" value="${minor.version}"/>
+			<entry key="client.vdeployDir" value="${deployDir}"/>
+		</propertyfile>
+		<loadproperties srcfile="client.version.properties"></loadproperties>
+		<echo message="##### v build number = ${client.vbuild.number} #####"/>
+		<echo message="##### build number = ${build.number} #####"/>
+	</target>
+
+	<target name="get-client-version-property" depends="init" unless="label">
+		<loadproperties srcfile="client.version.properties"></loadproperties>
+		<echo message="##### v build number = ${client.vbuild.number} #####"/>
+		<property name="label" value="V${client.vmajor.version}.${client.vminor.version}.${client.vbuild.number}"/>
+		<echo message="##### label = ${label} #####"/>
+	</target>
+
+	<target name="get-client-version-distribution-path" depends="init" unless="clientdistpath">
+		<loadproperties srcfile="client.version.properties"></loadproperties>
+		<property name="clientdistpath" value="client/${client.vmajor.version}.${client.vminor.version}/${client.vmajor.version}.${client.vminor.version}.${client.vbuild.number}"/>
+		<echo message="##### Jar Path: = ${clientdistpath} #####"/>
+	</target>
+
+	<target name="get-client-version-jar-name" depends="init" unless="clienjarname">
+		<loadproperties srcfile="client.version.properties"></loadproperties>
+		<property name="clienjarname" value="tf-${client.vpackageName}-client-${client.vmajor.version}.${client.vminor.version}.${client.vbuild.number}.jar"/>
+		<echo message="##### Jar Path: = ${clienjarname} #####"/>
+	</target>
+
+	<target name="package-client" depends="get-client-version-property,get-client-version-distribution-path,get-client-version-jar-name">
+		<loadproperties srcfile="client.version.properties"></loadproperties>
+		<property name="package.dir" value="${builds.dir}/client/${label}"/>
+		<available property="package.exists" file="${package.dir}" type="dir"/>
+		<fail if="package.exists" message="Aborting. Package has already been built at ${package.dir}"/>
+		<mkdir dir="${package.dir}"/>
+		<copy todir="${package.dir}/bin">
+			<fileset dir="${basedir}/bin" includes="RMI_CLIENT_JMX_CONSOLE.template,lib.sh,DEPLOY_RMI_CLIENT"/>
+			<filterchain>
+				<replacetokens>
+					<token key="version" value="${label}"/>
+					<token key="package.dir" value="${package.dir}"/>
+				</replacetokens>
+			</filterchain>
+		</copy>
+		<chmod perm="+x" dir="${package.dir}/bin" includes="*"/>
+		<copy todir="${package.dir}/jar">
+			<fileset dir="${distDir}/${clientdistpath}" includes="*client*.jar"/>
+		</copy>
+		<copy todir="${package.dir}/${lib.dir}">
+			<fileset dir="${basedir}/lib" includes="commons-logging-api*.jar,commons-lang*.jar,log4j*.jar,jmxtools*.jar"/>
+		</copy>
+		<symlink link="${builds.dir}/client/${label}/jar/tf-xmlolap-client.jar" resource="${clienjarname}" failonerror="false"/>
+		<copy todir="${package.dir}">
+			<fileset dir="${basedir}" includes="*.xml,*.properties" />
+		</copy>
+	</target>
+	<!-- client targets -->
+
+	<path id="lib-jars">
+		<fileset dir="lib">
+			<include name="*.jar"/>
+		</fileset>
+	</path>
+
+	<macrodef name="copy-templates">
+		<attribute name="dir"/>
+		<attribute name="properties.file" default="${replacement.properties}"/>
+		<sequential>
+			<copy todir="@{dir}" overwrite="true" failonerror="false" verbose="true">
+				<fileset dir="@{dir}" includes="*.template"/>
+				<filterchain>
+					<filterreader classname="org.apache.tools.ant.filters.ReplaceTokens">
+						<param type="propertiesfile" value="@{properties.file}"/>
+					</filterreader>
+				</filterchain>
+				<mapper type="glob" from="*.template" to="*"/>
+			</copy>
+		</sequential>
+	</macrodef>
+
+	<macrodef name="setcurrent-label">
+		<attribute name="base-dir"/>
+		<sequential>
+		<symlink action="delete" link="@{base-dir}/current" failonerror="false"/>
+		<symlink link="@{base-dir}/current" resource="@{base-dir}/${label}" overwrite="true"/>
+		</sequential>
+	</macrodef>
+
+	<target name="init">
+		<echo message="##### running init #####"/>
+		<mkdir dir="${server.class.dir}"/>
+	</target>
+
+	<target name="clean" depends="init">
+		<echo message="##### running clean #####"/>
+		<delete dir="classes"/>
+	</target>
+
+	<target name="replacement-properties" depends="get-version-property">
+		<echoproperties destfile="${replacement.properties}"/>
+	</target>
+
+	<target name="compile-only" depends="init">
+		<!--iajc srcdir="jsrc" destdir="${class.dir}" source="1.5" debug="on" aspectPath="lib/tf-monitor-3.0.6-jdk1.6.jar">
+			<classpath refid="lib-jars"/>
+		</iajc-->
+		<javac srcdir="server/jsrc" destdir="${server.class.dir}" source="1.5" debug="on">
+			<classpath refid="lib-jars"/>
+		</javac>
+	</target>
+
+	<target name="copy-to-classes">
+		<copy todir="${server.class.dir}">
+			<fileset dir="server/jsrc" includes="**/*.xml"/>
+			<fileset dir="server/jsrc" includes="**/*.properties"/>
+			<fileset dir="server/jsrc" includes="**/*.policy"/>
+		</copy>
+		<copy todir="${server.class.dir}/META-INF">
+			<fileset dir="resources" includes="aop.xml"/>
+		</copy>
+	</target>
+
+	<target name="compile" depends="compile-only, copy-to-classes"/>
+
+	<target name="replace-tokens" depends="replacement-properties">
+		<copy-templates dir="resources"/>
+	</target>
+
+	<target name="local-prep" depends="compile-only,replace-tokens,copy-to-classes"/>
+
+	<target name="jar" depends="local-prep">
+		<loadproperties srcfile="server.package.properties"></loadproperties>
+		<echo message="##### running jar #####"/>
+		<mkdir dir="tempjar"/>
+		<mkdir dir="${deployDir}"/>
+		<copy todir="tempjar/META-INF">
+			<fileset dir="web" includes="faces-config.xml,olap.tld"/>
+		</copy>
+		<copy todir="tempjar">
+			<fileset dir="resources" includes="template-sqlmap-config.xml,ehcache_xmlolap.xml"/>
+		</copy>
+		<copy todir="tempjar">
+			<fileset dir="classes" includes="**/*.*"/>
+		</copy>
+		<echo message="##### Preparing ${packageName} jar file #####"/>
+		<jar basedir="tempjar" destfile="${deployDir}/tf-${packageName}.jar"/>
+		<delete dir="tempjar"/>
+	</target>
+
+	<target name="version-jar" depends="jar">
+		<buildnumber file="server.package.properties"/>
+		<echo message="##### Preparing ${packageName} ${major.version}.${minor.version}.${build.number} jar file #####"/>
+		<copy file="${deployDir}/tf-${packageName}.jar" tofile="${distDir}/server/${major.version}.${minor.version}/${major.version}.${minor.version}.${build.number}/tf-${packageName}-${major.version}.${minor.version}.${build.number}.jar"/>
+		<copy todir="${distDir}/server/${major.version}.${minor.version}/${major.version}.${minor.version}.${build.number}" preservelastmodified="true" failonerror="false">
+			<fileset dir="data/" includes="*.xml,*.dtd"/>
+		</copy>
+
+		<propertyfile file="server.version.properties">
+			<entry key="vpackageName" value="${packageName}"/>
+			<entry key="vbuild.number" type="int" value="${build.number}"/>
+			<entry key="vdistDir" value="${distDir}"/>
+			<entry key="vmajor.version" type="int" value="${major.version}"/>
+			<entry key="vminor.version" type="int" value="${minor.version}"/>
+			<entry key="vdeployDir" value="${deployDir}"/>
+		</propertyfile>
+		<echo message="##### v build number = ${vbuild.number} #####"/>
+		<echo message="##### build number = ${build.number} #####"/>
+	</target>
+
+	<target name="get-version-property" depends="init" unless="label">
+		<loadproperties srcfile="server.version.properties"></loadproperties>
+		<echo message="##### v build number = ${vbuild.number} #####"/>
+		<property name="label" value="V${vmajor.version}.${vminor.version}.${vbuild.number}"/>
+		<echo message="##### label = ${label} #####"/>
+	</target>
+
+	<target name="get-jar-property" depends="init" unless="jar">
+		<loadproperties srcfile="server.version.properties"></loadproperties>
+		<property name="jar"
+				  value="${vmajor.version}.${vminor.version}/${vmajor.version}.${vminor.version}.${vbuild.number}"/>
+		<echo message="##### Jar Path: = ${jar} #####"/>
+	</target>
+
+	<target name="get-distribution-path" depends="init" unless="distpath">
+		<loadproperties srcfile="server.version.properties"></loadproperties>
+		<property name="distpath"
+				  value="${vmajor.version}.${vminor.version}/${vmajor.version}.${vminor.version}.${vbuild.number}"/>
+		<echo message="##### Jar Path: = ${distpath} #####"/>
+	</target>
+
+	<target name="get-jar-name" depends="init" unless="jarname">
+		<loadproperties srcfile="server.version.properties"></loadproperties>
+		<property name="jarname" value="tf-xmlolap-${vmajor.version}.${vminor.version}.${vbuild.number}.jar"/>
+		<echo message="##### Jar Path: = ${jarname} #####"/>
+	</target>
+
+	<target name="package-server" depends="get-version-property,get-jar-property,get-distribution-path,get-jar-name">
+		<property name="package.dir" value="${builds.dir}/server/${label}"/>
+		<available property="package.exists" file="${package.dir}" type="dir"/>
+		<fail if="package.exists" message="Aborting. Package has already been built at ${package.dir}"/>
+		<mkdir dir="${package.dir}"/>
+		<copy todir="${package.dir}/bin">
+			<fileset dir="${basedir}/bin" includes="*"/>
+			<filterchain>
+				<replacetokens>
+					<token key="version" value="${label}"/>
+					<token key="package.dir" value="${package.dir}"/>
+				</replacetokens>
+			</filterchain>
+		</copy>
+		<chmod perm="+x" dir="${package.dir}/bin" includes="*"/>
+		<copy todir="${package.dir}/config">
+			<fileset dir="${basedir}/config" includes="*.*"/>
+			<filterchain>
+				<replacetokens>
+					<token key="version" value="${label}"/>
+					<token key="package.dir" value="${package.dir}"/>
+				</replacetokens>
+			</filterchain>
+			<fileset dir="${basedir}/data" includes="OlapSpec.dtd"/>
+		</copy>
+		<copy todir="${package.dir}/data">
+			<fileset dir="${basedir}/data" includes="dictionary/**,tfsearch/**,wordnet/**"/>
+		</copy>
+		<copy todir="${package.dir}/client-config">
+			<fileset dir="${basedir}/config" includes="*.policy"/>
+			<filterchain>
+				<replacetokens>
+					<token key="version" value="${label}"/>
+					<token key="package.dir" value="${package.dir}"/>
+				</replacetokens>
+			</filterchain>
+		</copy>
+		<copy todir="${package.dir}/resources">
+			<fileset dir="dist/server/${distpath}" excludes="*.jar"/>
+			<filterchain>
+				<replacetokens>
+					<token key="version" value="${label}"/>
+				</replacetokens>
+			</filterchain>
+		</copy>
+		<copy todir="${package.dir}/resources">
+			<fileset dir="${basedir}/resources/" includes="alertQuartz.properties"/>
+			<filterchain>
+				<replacetokens>
+					<token key="version" value="${label}"/>
+				</replacetokens>
+			</filterchain>
+		</copy>
+		<copy todir="${package.dir}/monitor">
+			<fileset dir="${basedir}/monitor"/>
+			<filterchain>
+				<replacetokens>
+					<token key="version" value="${label}"/>
+				</replacetokens>
+			</filterchain>
+		</copy>
+		<copy todir="${package.dir}/examples">
+			<fileset dir="${basedir}/examples"/>
+			<filterchain>
+				<replacetokens>
+					<token key="version" value="${label}"/>
+					<token key="package.dir" value="${package.dir}"/>
+				</replacetokens>
+			</filterchain>
+		</copy>
+		<copy todir="${package.dir}/jar">
+			<fileset dir="dist/server/${distpath}" includes="*.jar" excludes="*client*.jar"/>
+			<fileset dir="${basedir}/lib" includes="tf-xmlolapMonitorWarehouseElements.jar"/>
+		</copy>
+		<copy todir="${package.dir}/${lib.dir}">
+			<fileset dir="${basedir}/lib" includes="*.*" excludes="tf-monitor*.jar"/>
+		</copy>
+		<copy todir="${package.dir}/monitor/lib">
+			<fileset dir="${basedir}/lib" includes="tf-monitor*.jar"/>
+		</copy>
+		<copy todir="${package.dir}">
+			<fileset dir="${basedir}" includes="*.xml,*.properties" />
+		</copy>
+		<antcall target="common-webapps"></antcall>
+		<symlink link="${builds.dir}/server/${label}/jar/tf-xmlolap.jar" resource="${jarname}" failonerror="false"/>
+	</target>
+
+	<target name="common-webapps" depends="get-version-property,get-jar-property,get-distribution-path">
+		<echo message="##### running webapps #####"/>
+		<property name="webapps.dir" location="${package.dir}/webapps/${webapp.name}"/>
+		<copy todir="${webapps.dir}/WEB-INF/classes" preservelastmodified="true" failonerror="false">
+			<fileset dir="web/${webapp.name}/WEB-INF/resources" excludes="**/.svn/**,*.log,*.log.lck,.classpath,.project"/>
+			<fileset dir="${package.dir}/resources" includes="*.*"/>
+		</copy>
+		<copy todir="${webapps.dir}/WEB-INF/lib" preservelastmodified="true" failonerror="false">
+			<fileset dir="lib" includes="*.jar" excludes="servlet-api.jar,jsp-api.jar,jms-11.jar"/>
+			<fileset dir="dist/server/${distpath}" includes="*.jar" excludes="*rmi-client.jar"/>
+		</copy>
+		<copy todir="${webapps.dir}/WEB-INF" preservelastmodified="true" failonerror="false">
+			<fileset dir="web/${webapp.name}/WEB-INF" includes="*.xml,*.tld"/>
+		</copy>
+		<copy todir="${webapps.dir}/images" preservelastmodified="true" failonerror="false">
+			<fileset dir="web/${webapp.name}/images" includes="*.*"/>
+		</copy>
+		<copy todir="${webapps.dir}" preservelastmodified="true" failonerror="false">
+			<fileset dir="web/${webapp.name}" includes="*.jsf,*.jsp,*.jspf,*.css,*.html,*.js,*.js.template,*.html.template"/>
+		</copy>
+	</target>
+
+	<target name="webapps" depends="jar">
+		<echo message="##### running webapps #####"/>
+		<property name="webapps.dir" location="${RESIN_WEBAPPS}/${webapp.name}"/>
+		<copy todir="${webapps.dir}/WEB-INF/classes" preservelastmodified="true" failonerror="false">
+			<fileset dir="web/${webapp.name}/WEB-INF/resources"
+					 excludes="**/.svn/**,*.log,*.log.lck,.classpath,.project"/>
+			<fileset dir="resources" includes="*.*"/>
+		</copy>
+		<copy todir="${webapps.dir}/WEB-INF/classes" preservelastmodified="true" failonerror="false">
+			<fileset dir="data/" includes="*.xml,*.dtd"/>
+		</copy>
+		<copy todir="${webapps.dir}/WEB-INF/lib" preservelastmodified="true" failonerror="false">
+			<fileset dir="lib" includes="*.jar" excludes="servlet-api.jar,jsp-api.jar,jms-11.jar"/>
+			<fileset dir="current" includes="tf-xmlolap.jar"/>
+		</copy>
+		<copy todir="${webapps.dir}/WEB-INF" preservelastmodified="true" failonerror="false">
+			<fileset dir="web/${webapp.name}/WEB-INF" includes="*.xml,*.tld"/>
+		</copy>
+		<copy todir="${webapps.dir}/images" preservelastmodified="true" failonerror="false">
+			<fileset dir="web/${webapp.name}/images" includes="*.*"/>
+		</copy>
+		<copy todir="${webapps.dir}" preservelastmodified="true" failonerror="false">
+			<fileset dir="web/${webapp.name}"
+					 includes="*.jsf,*.jsp,*.jspf,*.css,*.html,*.js,*.js.template,*.html.template"/>
+		</copy>
+	</target>
+
+	<target name="war" depends="webapps">
+		<echo message="##### running war #####"/>
+		<war webxml="${webapps.dir}/WEB-INF/web.xml" basedir="${webapps.dir}"
+			 destfile="${RESIN_WEBAPPS}/${webapp.name}.war" duplicate="fail">
+		</war>
+	</target>
+
+	<target name="copywar" depends="war">
+		<echo message="##### running copywar #####"/>
+		<copy file="${RESIN_WEBAPPS}/${webapp.name}.war" todir="${deployed.webapps.dir}"/>
+		<echo message="##### webapp deployed #####"/>
+	</target>
+
+	<target name="deploy-local" depends="copywar">
+		<echo message="##### deploy-local completed#####"/>
+	</target>
+
+	<target name="xmlolap">
+		<echo message="##### running xmlolap #####"/>
+		<property name="webapp.name" value="xmlolap"/>
+		<echo message="##### webapp.name is ${webapp.name} #####"/>
+		<antcall target="deploy-local"/>
+	</target>
+
+	<target name="delete-xmlolap">
+		<property name="webapp.name" value="xmlolap"/>
+		<echo>webapp.name is ${webapp.name}</echo>
+		<antcall target="delete"/>
+	</target>
+
+	<target name="delete" depends="clean">
+		<echo>Target webapps</echo>
+		<property name="webapps.dir" location="${RESIN_WEBAPPS}/${webapp.name}"/>
+		<delete quiet="true" failonerror="false" dir="${webapps.dir}"/>
+	</target>
+
+	<target name="install-xmlolap-common-deployment">
+		<antcall target="package">
+			<param name="webapp.name" value="xmlolap"/>
+		</antcall>
+	</target>
+
+	<target name="setcurrent" depends="get-version-property,get-jar-property, get-distribution-path">
+		<symlink action="delete" link="${builds.dir}/current" failonerror="false"/>
+		<symlink link="${builds.dir}/current" resource="${builds.dir}/${label}" failonerror="false"/>
+	</target>
+
+	<!-- tools for xmlolap -->
+
+	<target name="install-db" depends="generateDb">
+	</target>
+
+	<target name="initialjar">
+		<delete dir="tempClasses"/>
+		<mkdir dir="tempClasses"/>
+		<javac destdir="tempClasses" source="1.5" debug="on">
+			<src>
+				<pathelement location="src"/>
+			</src>
+			<classpath>
+				<pathelement path="resources"/>
+				<fileset dir="lib" includes="**/*.jar"/>
+			</classpath>
+		</javac>
+		<delete file="lib/tf-warehouseElements.jar"/>
+		<copy todir="tempClasses">
+			<fileset dir="src">
+				<include name="**/*"/>
+			</fileset>
+		</copy>
+		<jar basedir="tempClasses" destfile="lib/tf-warehouseElements.jar"/>
+	</target>
+
+	<target name="checkFileExits">
+		<available file="lib/tf-warehouseElements.jar" property="file.present"/>
+	</target>
+
+	<target name="unjarElementsJar" depends="checkFileExits" if="file.present">
+		<delete dir="temp"/>
+		<unjar dest="temp" src="lib/tf-warehouseElements.jar" overwrite="true"/>
+	</target>
+
+
+	<target name="generateWarehouseElementJar" depends="replace-tokens">
+		<java classname="com.tribalfusion.xmlolap.config.schema.WarehouseElementsGenerator" failonerror="true" fork="yes">
+			<jvmarg line="-Xms256m -Xmx256m"/>
+			<classpath>
+				<pathelement path="classes"/>
+				<pathelement path="resources"/>
+				<pathelement path="data"/>
+				<fileset dir="lib">
+					<include name="**/*"/>
+				</fileset>
+				<fileset dir="resources">
+					<include name="*.*"/>
+				</fileset>
+			</classpath>
+			<arg value="monitor/resources/templates"/>
+			<arg value="temp"/>
+			<arg value="xmt"/>
+		</java>
+		<delete dir="tempClasses"/>
+		<mkdir dir="tempClasses"/>
+		<javac destdir="temp" source="1.5" debug="on">
+			<src>
+				<pathelement location="temp"/>
+			</src>
+			<classpath>
+				<pathelement path="classes"/>
+				<pathelement path="resources"/>
+				<pathelement path="data"/>
+				<fileset dir="lib" includes="**/*.jar"/>
+			</classpath>
+		</javac>
+		<delete file="lib/tf-xmlolapMonitorWarehouseElements.jar"/>
+		<jar basedir="temp" destfile="lib/tf-xmlolapMonitorWarehouseElements.jar"/>
+		<delete dir="tempClasses"/>
+		<delete dir="temp"/>
+	</target>
+
+	<target name="loadSampleDataTT" depends="generateDbTopic">
+		<java classname="com.tribalfusion.xmlolap.util.TTreeReaderData" failonerror="true" fork="yes">
+			<jvmarg line="-Xms256m -Xmx256m"/>
+			<classpath>
+				<pathelement path="classes"/>
+				<pathelement path="resources"/>
+				<pathelement path="data"/>
+				<fileset dir="lib">
+					<include name="**/*"/>
+				</fileset>
+				<fileset dir="resources">
+					<include name="*.*"/>
+				</fileset>
+			</classpath>
+			<arg value="TT"/>
+		</java>
+	</target>
+
+	<target name="loadSampleData" depends="generateDb">
+		<java classname="com.tribalfusion.xmlolap.loader.test.XMLLoadTester" failonerror="true" fork="yes">
+			<jvmarg line="-Xms1024m -Xmx1024m"/>
+			<classpath>
+				<pathelement path="classes"/>
+				<pathelement path="resources"/>
+				<pathelement path="data"/>
+				<fileset dir="lib">
+					<include name="**/*"/>
+				</fileset>
+				<fileset dir="resources">
+					<include name="*.*"/>
+				</fileset>
+			</classpath>
+		</java>
+	</target>
+
+	<target name="generateDbTopic">
+		<java classname="com.tribalfusion.xmlolap.schemaapDbGenerateSchema" failonerror="true" fork="yes">
+			<jvmarg line="-Xms256m -Xmx256m"/>
+			<classpath>
+				<pathelement path="classes"/>
+				<pathelement path="resources"/>
+				<pathelement path="data"/>
+				<fileset dir="lib">
+					<include name="**/*"/>
+				</fileset>
+				<fileset dir="resources">
+					<include name="*.*"/>
+				</fileset>
+			</classpath>
+			<arg value="tt"/>
+		</java>
+	</target>
+
+	<target name="generateDb">
+		<java classname="com.tribalfusion.xmlolap.config.schema.XMLOlapDbGenerateSchema" failonerror="true" fork="yes">
+			<jvmarg line="-Xms256m -Xmx256m"/>
+			<classpath>
+				<pathelement path="classes"/>
+				<pathelement path="resources"/>
+				<pathelement path="data"/>
+				<fileset dir="lib">
+					<include name="**/*"/>
+				</fileset>
+				<fileset dir="resources">
+					<include name="*.*"/>
+				</fileset>
+			</classpath>
+		</java>
+	</target>
+
+	<target name="updateDb">
+		<java classname="com.tribalfusion.xmlolap.config.schema.XMLWarehouseSchemaUpdator" failonerror="true" fork="yes">
+			<jvmarg line="-Xms256m -Xmx256m"/>
+			<classpath>
+				<pathelement path="classes"/>
+				<pathelement path="resources"/>
+				<pathelement path="data"/>
+				<fileset dir="lib">
+					<include name="**/*"/>
+				</fileset>
+				<fileset dir="resources">
+					<include name="*.*"/>
+				</fileset>
+			</classpath>
+		</java>
+	</target>
+
+	<target name="loadTopicHierarchyDemoData" depends="generateDbForCustomDemo">
+		<java classname="com.tribalfusion.xmlolap.test.data.TTreeReaderDataExpo9Method" failonerror="true" fork="yes">
+			<jvmarg line="-Xms256m -Xmx256m"/>
+			<classpath>
+				<pathelement path="classes"/>
+				<pathelement path="resources"/>
+				<pathelement path="data"/>
+				<fileset dir="lib">
+					<include name="**/*"/>
+				</fileset>
+				<fileset dir="resources">
+					<include name="*.*"/>
+				</fileset>
+			</classpath>
+			<arg value="thh"/>
+		</java>
+
+		<java classname="com.tribalfusion.xmlolap.test.data.TTreeReaderDataCustomCubeMethod" failonerror="true"
+			  fork="yes">
+			<jvmarg line="-Xms256m -Xmx256m"/>
+			<classpath>
+				<pathelement path="classes"/>
+				<pathelement path="resources"/>
+				<pathelement path="data"/>
+				<fileset dir="lib">
+					<include name="**/*"/>
+				</fileset>
+				<fileset dir="resources">
+					<include name="*.*"/>
+				</fileset>
+			</classpath>
+			<arg value="thh"/>
+		</java>
+
+		<java classname="com.tribalfusion.xmlolap.test.data.TTreeReaderDataOldTopicMethod" failonerror="true"
+			  fork="yes">
+			<jvmarg line="-Xms256m -Xmx256m"/>
+			<classpath>
+				<pathelement path="classes"/>
+				<pathelement path="resources"/>
+				<pathelement path="data"/>
+				<fileset dir="lib">
+					<include name="**/*"/>
+				</fileset>
+				<fileset dir="resources">
+					<include name="*.*"/>
+				</fileset>
+			</classpath>
+			<arg value="thh"/>
+		</java>
+
+		<java classname="com.tribalfusion.xmlolap.test.data.CustomCubeLoaderTester" failonerror="true" fork="yes">
+			<jvmarg line="-Xms256m -Xmx256m"/>
+			<classpath>
+				<pathelement path="classes"/>
+				<pathelement path="resources"/>
+				<pathelement path="data"/>
+				<fileset dir="lib">
+					<include name="**/*"/>
+				</fileset>
+				<fileset dir="resources">
+					<include name="*.*"/>
+				</fileset>
+			</classpath>
+			<arg value="thh"/>
+		</java>
+	</target>
+
+	<target name="generateDbForCustomDemo">
+		<java classname="com.tribalfusion.xmlolap.schemaapDbGenerateSchema" failonerror="true" fork="yes">
+			<jvmarg line="-Xms256m -Xmx256m"/>
+			<classpath>
+				<pathelement path="classes"/>
+				<pathelement path="resources"/>
+				<pathelement path="data"/>
+				<fileset dir="lib">
+					<include name="**/*"/>
+				</fileset>
+				<fileset dir="resources">
+					<include name="*.*"/>
+				</fileset>
+			</classpath>
+			<arg value="thh"/>
+		</java>
+	</target>
+
+	<target name="replace-monitor-tokens" depends="replacement-properties">
+		<copy-templates dir="monitor/resources"/>
+		<copy-templates dir="monitor/bin"/>
+	</target>
+
+	<target name="deploy-monitor" depends="replace-monitor-tokens">
+		<copy todir="${deploy-monitor-root}/${label}/xmlolapmonitor">
+			<fileset dir="monitor" excludes="*.template"/>
+		</copy>
+		<chmod dir="${deploy-monitor-root}/${label}/xmlolapmonitor/bin" perm="ugo+rx" includes="*"/>
+	</target>
+
+	<target name="replace-examples-tokens" depends="replacement-properties">
+		<copy-templates dir="examples/resources"/>
+		<copy-templates dir="examples/bin"/>
+	</target>
+
+	<target name="deploy-examples" depends="replace-examples-tokens">
+		<copy todir="${deploy-examples-root}/${label}/xmlolapexamples">
+			<fileset dir="examples" excludes="*.template"/>
+		</copy>
+		<chmod dir="${deploy-examples-root}/${label}/xmlolapexamples/bin" perm="ugo+rx" includes="*"/>
+	</target>
+
+	<target name="replace-rmiclient-tokens" depends="replacement-properties">
+		<copy-templates dir="bin"/>
+	</target>
+
+	<target name="deploy-rmiclient" depends="replace-rmiclient-tokens">
+		<copy todir="${deploy-rmiclient-root}/${label}/xmlolaprmiconsole/bin">
+			<fileset dir="bin" excludes="*.template"/>
+		</copy>
+		<chmod dir="${deploy-rmiclient-root}/${label}/xmlolaprmiconsole/bin" perm="ugo+rx" includes="*"/>
+	</target>
+</project>
